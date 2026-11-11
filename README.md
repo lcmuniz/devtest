@@ -1,97 +1,99 @@
 # DevTest
 
-Plataforma de processos seletivos com avaliação técnica prática para desenvolvedores. O candidato se inscreve, declara o currículo num barema objetivo e resolve desafios de código numa Web IDE. A Banca avalia um ranking anonimizado e julga recursos.
+A hiring platform for developer selection processes with hands-on technical assessment. Candidates register, declare their résumé against an objective scoring rubric (*barema*) and solve coding challenges in a web IDE. The evaluation board (*Banca*) reviews an anonymized ranking and rules on appeals.
 
-## Funcionalidades
+The user interface and the domain vocabulary in the code are in Brazilian Portuguese. See [`GLOSSARY.md`](GLOSSARY.md) for the terms.
 
-- **Processos seletivos**: trilhas, barema curricular, janelas de inscrição, prova e recursos.
-- **Barema curricular**: pontuação preliminar calculada na inscrição; a Banca audita os comprovantes.
-- **Web IDE**: o candidato roda os testes públicos enquanto resolve o desafio e faz uma submissão definitiva por desafio.
-- **Runner multilinguagem**: executa TypeScript, Python e Java contra testes públicos e ocultos, com timeout e limite de memória.
-- **Autoavaliação técnica**: nota de corretude, qualidade (análise estática) e desempenho, com nota de corte eliminatória.
-- **Correção cega**: a Banca vê códigos anônimos (`CAND-1234`) até desmascarar os convocados.
-- **Recursos**: o candidato consulta o espelho da avaliação e contesta; a Banca julga e o ranking é recalculado.
-- **Relatórios**: ranking e recursos em CSV.
+## Features
+
+- **Selection processes**: tracks, résumé rubric, and windows for registration, exam and appeals.
+- **Résumé rubric**: a preliminary score is computed at registration; the board audits the supporting documents.
+- **Web IDE**: candidates run the public tests while solving a challenge and make one final submission per challenge.
+- **Multi-language runner**: runs TypeScript, Python and Java against public and hidden tests, with timeout and memory limits.
+- **Automated technical grading**: scores for correctness, quality (static analysis) and performance, with an eliminatory cutoff.
+- **Blind review**: the board sees anonymous codes (`CAND-1234`) until it unmasks the shortlisted candidates.
+- **Appeals**: candidates view their grading report and contest it; the board rules and the ranking is recalculated.
+- **Reports**: ranking and appeals in CSV.
 
 ## Stack
 
 Next.js 15 (App Router) · TypeScript · PostgreSQL · Tailwind CSS · Zod · Vitest
 
-## Arquitetura
+## Architecture
 
 ```
 src/
-  app/             páginas e rotas de API (Next.js)
-  components/      telas da Banca e do Candidato
-  domain/          regras de negócio puras (barema, ranking, recursos, runner, auth)
-  infrastructure/  repositórios PostgreSQL, fila do runner, sandbox, e-mail
-  middleware.ts    autenticação e perfil (Candidato / Banca) para páginas e /api
+  app/             pages and API routes (Next.js)
+  components/      board and candidate screens
+  domain/          pure business rules (rubric, ranking, appeals, runner, auth)
+  infrastructure/  PostgreSQL repositories, runner queue, sandbox, e-mail
+  middleware.ts    authentication and role (Candidate / Board) for pages and /api
 ```
 
-- A regra de negócio fica em `src/domain` e não depende de Next.js nem do banco.
-- As submissões entram numa fila persistida no PostgreSQL. O progresso chega à IDE por Server-Sent Events.
-- O código do candidato roda num serviço de runner separado e sem segredos (ver [Runner isolado](#runner-isolado)).
-- Sessão em cookie `httpOnly` assinado com HMAC-SHA256. Senhas com scrypt.
+- Business rules live in `src/domain` and depend on neither Next.js nor the database.
+- Submissions go into a queue persisted in PostgreSQL. Progress reaches the IDE through Server-Sent Events.
+- Candidate code runs in a separate runner service that holds no secrets (see [Isolated runner](#isolated-runner)).
+- Session in an `httpOnly` cookie signed with HMAC-SHA256. Passwords hashed with scrypt.
 
-Decisões de arquitetura em [`docs/adr`](docs/adr) e vocabulário do domínio em [`GLOSSARY.md`](GLOSSARY.md).
+Architecture decisions are in [`docs/adr`](docs/adr).
 
-## Como rodar
+## Getting started
 
-Requisitos: Node.js 20+, Docker, e `python3` e `javac`/`java` no `PATH` para executar desafios dessas linguagens.
+Requirements: Node.js 20+, Docker, plus `python3` and `javac`/`java` on the `PATH` to run challenges in those languages.
 
 ```bash
-docker compose up -d          # PostgreSQL em localhost:5433
-cp .env.example .env          # preencha AUTH_SECRET (openssl rand -hex 32)
+docker compose up -d          # PostgreSQL on localhost:5433
+cp .env.example .env          # fill in AUTH_SECRET (openssl rand -hex 32)
 npm install
 npm run dev                   # http://localhost:3000
 ```
 
-Não existe conta padrão. Para criar (ou redefinir a senha de) um membro da Banca:
+There is no default account. To create a board member (or reset their password):
 
 ```bash
-BANCA_SENHA='uma-senha-forte' node --env-file=.env scripts/criar-usuario-banca.js banca@exemplo.com "Nome do Avaliador"
+BANCA_SENHA='a-strong-password' node --env-file=.env scripts/criar-usuario-banca.js board@example.com "Reviewer Name"
 ```
 
-Candidatos se cadastram pela tela de login.
+Candidates sign up from the login screen.
 
-## Variáveis de ambiente
+## Environment variables
 
-| Variável | Obrigatória | Descrição |
+| Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | sim | conexão PostgreSQL |
-| `AUTH_SECRET` | sim | chave HMAC da sessão |
-| `BANCA_EMAIL`, `BANCA_SENHA` | não | credenciais usadas pelos scripts em `scripts/` |
-| `RUNNER_URL`, `RUNNER_TOKEN` | em produção | endereço e token do serviço de runner |
-| `RUNNER_SERVICE` | só no runner | `true` habilita `/api/runner/executar` |
-| `RUNNER_USE_DOCKER` | não | `true` executa cada submissão em container |
-| `API_HOST` | não | host usado pelos scripts em `scripts/` |
-| `PROCESSO_SELETIVO_ID`, `TRILHA_ID` | não | processo e trilha dos desafios criados pelos seeds |
+| `DATABASE_URL` | yes | PostgreSQL connection |
+| `AUTH_SECRET` | yes | session HMAC key |
+| `BANCA_EMAIL`, `BANCA_SENHA` | no | board credentials used by the scripts in `scripts/` |
+| `RUNNER_URL`, `RUNNER_TOKEN` | in production | runner service address and token |
+| `RUNNER_SERVICE` | runner only | `true` enables `/api/runner/executar` |
+| `RUNNER_USE_DOCKER` | no | `true` runs each submission in a container |
+| `API_HOST` | no | host used by the scripts in `scripts/` |
+| `PROCESSO_SELETIVO_ID`, `TRILHA_ID` | no | selection process and track for the challenges created by the seed scripts |
 
-## Runner isolado
+## Isolated runner
 
-O código do candidato é não confiável. Em produção, rode a mesma imagem duas vezes:
+Candidate code is untrusted. In production, run the same image twice:
 
-| | Aplicação | Runner |
+| | Application | Runner |
 |---|---|---|
-| Variáveis | `DATABASE_URL`, `AUTH_SECRET`, `RUNNER_URL=http://<runner>:3000`, `RUNNER_TOKEN` | `RUNNER_SERVICE=true`, `RUNNER_TOKEN` (e nada mais) |
-| Rede | pública | sem rota pública; egress bloqueado (NetworkPolicy) |
+| Variables | `DATABASE_URL`, `AUTH_SECRET`, `RUNNER_URL=http://<runner>:3000`, `RUNNER_TOKEN` | `RUNNER_SERVICE=true`, `RUNNER_TOKEN` (nothing else) |
+| Network | public | no public route; egress blocked (NetworkPolicy) |
 
-Sem `RUNNER_URL`, o código roda dentro da própria aplicação e pode ler os segredos dela pelo `/proc`. Use esse modo só em desenvolvimento.
+Without `RUNNER_URL`, candidate code runs inside the application itself and can read its secrets through `/proc`. Use that mode for development only.
 
-### Deploy do runner
+### Deploying the runner
 
-O runner tem dois modos:
+The runner has two modes:
 
-- **Subprocesso** (padrão): roda `node`, `python3` e `java` dentro do próprio container do runner. Cada instância executa uma submissão por vez e, ao fim, mata todos os processos que o candidato criou. Para mais vazão, aumente o número de réplicas.
-- **Container por submissão** (`RUNNER_USE_DOCKER=true`): cada submissão roda num container descartável, sem rede, com sistema de arquivos somente leitura, usuário sem privilégio e limites de memória, CPU e processos. Execuções simultâneas ficam isoladas entre si.
+- **Subprocess** (default): runs `node`, `python3` and `java` inside the runner container itself. Each instance runs one submission at a time and, when it finishes, kills every process the candidate started. Add replicas for more throughput.
+- **Container per submission** (`RUNNER_USE_DOCKER=true`): each submission runs in a throwaway container with no network, a read-only filesystem, an unprivileged user and memory, CPU and process limits. Concurrent runs are isolated from each other.
 
 #### OpenShift / Kubernetes
 
-Use o modo subprocesso. Crie um Deployment com a mesma imagem e:
+Use subprocess mode. Create a Deployment from the same image with:
 
-- variáveis `RUNNER_SERVICE=true` e `RUNNER_TOKEN` (de um Secret), sem `DATABASE_URL` nem `AUTH_SECRET`;
-- um Service interno, sem Route nem Ingress;
-- uma NetworkPolicy que bloqueia todo egress do runner e só aceita ingress vindo dos pods da aplicação.
+- the variables `RUNNER_SERVICE=true` and `RUNNER_TOKEN` (from a Secret), without `DATABASE_URL` or `AUTH_SECRET`;
+- an internal Service, with no Route or Ingress;
+- a NetworkPolicy that blocks all runner egress and only accepts ingress from the application pods.
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -113,7 +115,7 @@ spec:
 
 #### Dokploy / Docker Compose
 
-O runner fica numa rede `internal`, sem acesso à internet nem a outros serviços:
+The runner sits on an `internal` network, with no access to the internet or to other services:
 
 ```yaml
 services:
@@ -138,7 +140,7 @@ networks:
     internal: true
 ```
 
-Para o modo container por submissão, acrescente ao `runner`:
+For container-per-submission mode, add to `runner`:
 
 ```yaml
     environment:
@@ -146,21 +148,21 @@ Para o modo container por submissão, acrescente ao `runner`:
       TMPDIR: /var/lib/devtest-runner
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      # mesmo caminho no host e no runner: o docker monta o workspace a partir do host
+      # same path on the host and in the runner: docker mounts the workspace from the host
       - /var/lib/devtest-runner:/var/lib/devtest-runner
 ```
 
-A imagem do runner precisa do CLI `docker`, e o host precisa das imagens `node:20-alpine`, `python:3.12-alpine` e `eclipse-temurin:21-jdk-alpine`.
+The runner image needs the `docker` CLI, and the host needs the `node:20-alpine`, `python:3.12-alpine` and `eclipse-temurin:21-jdk-alpine` images.
 
-> **Atenção:** quem acessa o `docker.sock` tem root no host. Nesse modo o runner só pode rodar num host dedicado a ele, nunca no mesmo host do banco ou da aplicação. Para isolamento mais forte, instale o [gVisor](https://gvisor.dev) e adicione `--runtime=runsc` ao comando em `construirComandoDockerSandbox`.
+> **Warning:** access to `docker.sock` means root on the host. In this mode, run the runner only on a host dedicated to it, never on the same host as the database or the application. For stronger isolation, install [gVisor](https://gvisor.dev) and add `--runtime=runsc` to the command in `construirComandoDockerSandbox`.
 
-## Testes
+## Tests
 
 ```bash
-npm test            # Vitest; usa o PostgreSQL do docker compose (cria o banco de teste)
+npm test            # Vitest; uses the docker compose PostgreSQL (creates the test database)
 npm run typecheck
 ```
 
-## Licença
+## License
 
 [MIT](LICENSE)
