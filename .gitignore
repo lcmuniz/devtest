@@ -1,0 +1,20 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+.DS_Store
+*.log
+coverage/
+*.tsbuildinfo
+.data/
+.env
+.env.local
+
+# Skills/configs de agentes (locais, não publicadas)
+.agents/
+.gemini/
+skills-lock.json
+
+# Manifests de deploy locais
+openshift/
