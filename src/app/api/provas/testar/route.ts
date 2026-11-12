@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   getDesafioRepository,
   desafioPertenceAoProcesso,
+  buscarProcessosDoDesafio,
 } from "@/infrastructure/repositories/desafio-repository";
 import { getCandidatoRepository } from "@/infrastructure/repositories/candidato-repository";
 import { obterSessaoRequisicao } from "@/infrastructure/auth/session-server";
@@ -75,12 +76,14 @@ export async function POST(request: Request) {
     }
 
     // Candidato só testa desafios de processos em que está inscrito
+    let processoSeletivoId = "";
     if (sessao.perfil === "CANDIDATO") {
       const inscricoes = await getCandidatoRepository().buscarInscricoesPorCandidato(sessao.id);
       let inscrito = false;
       for (const insc of inscricoes) {
         if (await desafioPertenceAoProcesso(desafio.id, insc.processoSeletivoId)) {
           inscrito = true;
+          processoSeletivoId = insc.processoSeletivoId;
           break;
         }
       }
@@ -90,11 +93,16 @@ export async function POST(request: Request) {
           { status: 403 }
         );
       }
+    } else {
+      const processos = await buscarProcessosDoDesafio(desafio.id);
+      if (processos.length > 0) {
+        processoSeletivoId = processos[0];
+      }
     }
 
     const psRepo = getPsRepository();
-    const processoSeletivo = desafio.processoSeletivoId
-      ? await psRepo.findById(desafio.processoSeletivoId)
+    const processoSeletivo = processoSeletivoId
+      ? await psRepo.findById(processoSeletivoId)
       : null;
     if (processoSeletivo) {
       const janela = verificarJanelaDeProvaAtiva(processoSeletivo);

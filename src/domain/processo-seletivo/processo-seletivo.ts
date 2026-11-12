@@ -50,6 +50,8 @@ export const ProcessoSeletivoSchema = z.object({
   trilhas: z.array(TrilhaSchema).min(1, "O Processo Seletivo deve possuir ao menos uma Trilha técnica vinculada."),
   barema: z.array(CriterioBaremaSchema).min(1, "O Processo Seletivo deve possuir ao menos um critério de Barema."),
   desafiosIds: z.array(z.string()).optional(),
+  trilhaId: z.string().optional(),
+  desafiosPorTrilha: z.record(z.string(), z.array(z.string())).optional(),
   sorteio: z
     .object({
       java: z.number().optional(),

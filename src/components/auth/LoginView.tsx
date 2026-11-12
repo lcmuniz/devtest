@@ -68,7 +68,7 @@ export function LoginView({
           ? redirectInicial
           : perfil === "BANCA_AVALIADORA"
           ? "/banca/avaliacao"
-          : "/candidato/prova";
+          : "/candidato/inscricao";
 
       if (typeof window !== "undefined") {
         window.location.href = destino;

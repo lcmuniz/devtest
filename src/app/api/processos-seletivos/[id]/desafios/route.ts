@@ -11,8 +11,10 @@ export async function GET(
 ) {
   try {
     const { id: processoSeletivoId } = await params;
+    const url = new URL(request.url);
+    const trilhaId = url.searchParams.get("trilhaId") || undefined;
     const repo = getDesafioRepository();
-    const desafios = await repo.listarDesafiosDoProcesso(processoSeletivoId);
+    const desafios = await repo.listarDesafiosDoProcesso(processoSeletivoId, trilhaId);
     return NextResponse.json({ sucesso: true, desafios });
   } catch (error: any) {
     return NextResponse.json(
@@ -30,6 +32,7 @@ export async function POST(
     const { id: processoSeletivoId } = await params;
     const body = await request.json();
     const repo = getDesafioRepository();
+    const trilhaId = body.trilhaId || undefined;
 
     // Modo 1: Sorteio aleatório por cotas de linguagem e categorias
     if (body.sorteio && typeof body.sorteio === "object") {
@@ -39,8 +42,8 @@ export async function POST(
       const sorteados = sortearDesafiosPorLinguagem(bancoCompleto, cotas, categorias);
       const idsSorteados = sorteados.map((d) => d.id);
 
-      await repo.vincularDesafiosAoProcesso(processoSeletivoId, idsSorteados);
-      const atualizados = await repo.listarDesafiosDoProcesso(processoSeletivoId);
+      await repo.vincularDesafiosAoProcesso(processoSeletivoId, idsSorteados, trilhaId);
+      const atualizados = await repo.listarDesafiosDoProcesso(processoSeletivoId, trilhaId);
 
       return NextResponse.json({
         sucesso: true,
@@ -63,8 +66,8 @@ export async function POST(
       );
     }
 
-    await repo.vincularDesafiosAoProcesso(processoSeletivoId, desafiosIds);
-    const atualizados = await repo.listarDesafiosDoProcesso(processoSeletivoId);
+    await repo.vincularDesafiosAoProcesso(processoSeletivoId, desafiosIds, trilhaId);
+    const atualizados = await repo.listarDesafiosDoProcesso(processoSeletivoId, trilhaId);
 
     return NextResponse.json({
       sucesso: true,
@@ -86,6 +89,7 @@ export async function DELETE(
     const { id: processoSeletivoId } = await params;
     const url = new URL(request.url);
     const desafioId = url.searchParams.get("desafioId");
+    const trilhaId = url.searchParams.get("trilhaId") || undefined;
 
     if (!desafioId) {
       return NextResponse.json(
@@ -95,8 +99,8 @@ export async function DELETE(
     }
 
     const repo = getDesafioRepository();
-    await repo.desvincularDesafioDoProcesso(processoSeletivoId, desafioId);
-    const atualizados = await repo.listarDesafiosDoProcesso(processoSeletivoId);
+    await repo.desvincularDesafioDoProcesso(processoSeletivoId, desafioId, trilhaId);
+    const atualizados = await repo.listarDesafiosDoProcesso(processoSeletivoId, trilhaId);
 
     return NextResponse.json({
       sucesso: true,

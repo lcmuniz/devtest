@@ -3,6 +3,7 @@ import { negarAcessoAoCandidato } from "@/infrastructure/auth/session-server";
 import {
   getDesafioRepository,
   desafioPertenceAoProcesso,
+  buscarProcessosDoDesafio,
 } from "@/infrastructure/repositories/desafio-repository";
 import { getRepository as getPsRepository } from "@/infrastructure/repositories/processo-seletivo-repository";
 import { getSubmissaoRepository } from "@/infrastructure/repositories/submissao-repository";
@@ -130,10 +131,11 @@ export async function POST(request: Request) {
     }
 
     const psRepo = getPsRepository();
-    let psId = desafio.processoSeletivoId || "";
-    if (!psId) {
-      psId = inscricao?.processoSeletivoId || "";
-    }
+    const processosDoDesafio = await buscarProcessosDoDesafio(desafio.id);
+    const psId =
+      inscricao?.processoSeletivoId ||
+      body.processoSeletivoId ||
+      (processosDoDesafio.length > 0 ? processosDoDesafio[0] : "");
 
     const processoSeletivo = psId ? await psRepo.findById(psId) : null;
     if (processoSeletivo) {

@@ -17,13 +17,18 @@ export interface DesafioRepository {
   }): Promise<DesafioEntity[]>;
   vincularDesafiosAoProcesso(
     processoSeletivoId: string,
-    desafiosIds: string[]
+    desafiosIds: string[],
+    trilhaId?: string
   ): Promise<void>;
   desvincularDesafioDoProcesso(
     processoSeletivoId: string,
-    desafioId: string
+    desafioId: string,
+    trilhaId?: string
   ): Promise<void>;
-  listarDesafiosDoProcesso(processoSeletivoId: string): Promise<DesafioEntity[]>;
+  listarDesafiosDoProcesso(
+    processoSeletivoId: string,
+    trilhaId?: string
+  ): Promise<DesafioEntity[]>;
   reset(): Promise<void>;
 }
 
@@ -62,13 +67,11 @@ export class PostgresDesafioRepository implements DesafioRepository {
 
     const res = await pool.query(
       `INSERT INTO desafios
-        (id, processo_seletivo_id, trilha_id, titulo, categoria, enunciado_markdown, linguagem, codigo_template, suite_testes_publicos, suite_testes_ocultos, timeout_seconds, memory_limit_mb, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        (id, titulo, categoria, enunciado_markdown, linguagem, codigo_template, suite_testes_publicos, suite_testes_ocultos, timeout_seconds, memory_limit_mb, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
         id,
-        input.processoSeletivoId || null,
-        input.trilhaId || null,
         input.titulo,
         categoria,
         input.enunciadoMarkdown,
@@ -84,7 +87,7 @@ export class PostgresDesafioRepository implements DesafioRepository {
     );
 
     if (input.processoSeletivoId) {
-      await this.vincularDesafiosAoProcesso(input.processoSeletivoId, [id]);
+      await this.vincularDesafiosAoProcesso(input.processoSeletivoId, [id], input.trilhaId);
     }
 
     return mapRowToDesafio(res.rows[0]);
@@ -98,23 +101,19 @@ export class PostgresDesafioRepository implements DesafioRepository {
 
     const res = await pool.query(
       `UPDATE desafios
-       SET processo_seletivo_id = $1,
-           trilha_id = $2,
-           titulo = $3,
-           categoria = $4,
-           enunciado_markdown = $5,
-           linguagem = $6,
-           codigo_template = $7,
-           suite_testes_publicos = $8,
-           suite_testes_ocultos = $9,
-           timeout_seconds = $10,
-           memory_limit_mb = $11,
-           updated_at = $12
-       WHERE id = $13
+       SET titulo = $1,
+           categoria = $2,
+           enunciado_markdown = $3,
+           linguagem = $4,
+           codigo_template = $5,
+           suite_testes_publicos = $6,
+           suite_testes_ocultos = $7,
+           timeout_seconds = $8,
+           memory_limit_mb = $9,
+           updated_at = $10
+       WHERE id = $11
        RETURNING *`,
       [
-        input.processoSeletivoId || null,
-        input.trilhaId || null,
         input.titulo,
         categoria,
         input.enunciadoMarkdown,
@@ -149,18 +148,19 @@ export class PostgresDesafioRepository implements DesafioRepository {
     await ensureSchemaInitialized();
     const pool = getDbPool();
 
-    // Se filtrou por processoSeletivoId, busca desafios vinculados tanto pela tabela associativa processo_seletivo_desafios quanto por processo_seletivo_id direto
-    if (filtros?.processoSeletivoId) {
-      const conditions: string[] = [
-        `(d.processo_seletivo_id = $1 OR psd.processo_seletivo_id = $1)`,
-      ];
-      const params: any[] = [filtros.processoSeletivoId];
+    // Se filtrou por processoSeletivoId ou trilhaId, busca desafios vinculados pela tabela associativa N:N
+    if (filtros?.processoSeletivoId || filtros?.trilhaId) {
+      const conditions: string[] = [];
+      const params: any[] = [];
+
+      if (filtros.processoSeletivoId) {
+        params.push(filtros.processoSeletivoId);
+        conditions.push(`psd.processo_seletivo_id = $${params.length}`);
+      }
 
       if (filtros.trilhaId) {
         params.push(filtros.trilhaId);
-        conditions.push(
-          `(d.trilha_id = $${params.length} OR d.trilha_id IS NULL OR d.trilha_id = '')`
-        );
+        conditions.push(`psd.trilha_id = $${params.length}`);
       }
 
       if (filtros.linguagem) {
@@ -171,7 +171,7 @@ export class PostgresDesafioRepository implements DesafioRepository {
       const res = await pool.query(
         `SELECT DISTINCT d.*
          FROM desafios d
-         LEFT JOIN processo_seletivo_desafios psd ON psd.desafio_id = d.id
+         INNER JOIN processo_seletivo_desafios psd ON psd.desafio_id = d.id
          WHERE ${conditions.join(" AND ")}
          ORDER BY d.created_at DESC`,
         params
@@ -181,11 +181,6 @@ export class PostgresDesafioRepository implements DesafioRepository {
 
     const conditions: string[] = [];
     const params: any[] = [];
-
-    if (filtros?.trilhaId) {
-      params.push(filtros.trilhaId);
-      conditions.push(`trilha_id = $${params.length}`);
-    }
 
     if (filtros?.linguagem) {
       params.push(filtros.linguagem.toLowerCase());
@@ -205,40 +200,72 @@ export class PostgresDesafioRepository implements DesafioRepository {
 
   async vincularDesafiosAoProcesso(
     processoSeletivoId: string,
-    desafiosIds: string[]
+    desafiosIds: string[],
+    trilhaId?: string
   ): Promise<void> {
     await ensureSchemaInitialized();
     const pool = getDbPool();
 
+    // Se não informou trilhaId, tenta associar à primeira trilha do processo seletivo
+    let tId = trilhaId;
+    if (!tId) {
+      const tRes = await pool.query(
+        `SELECT id FROM trilhas WHERE processo_seletivo_id = $1 ORDER BY id ASC LIMIT 1`,
+        [processoSeletivoId]
+      );
+      if (tRes.rows.length > 0) {
+        tId = tRes.rows[0].id;
+      }
+    }
+
     for (let i = 0; i < desafiosIds.length; i++) {
       const desafioId = desafiosIds[i];
       const id = `psd-${crypto.randomUUID()}`;
-      await pool.query(
-        `INSERT INTO processo_seletivo_desafios (id, processo_seletivo_id, desafio_id, ordem)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (processo_seletivo_id, desafio_id) DO NOTHING`,
-        [id, processoSeletivoId, desafioId, i]
-      );
+      if (tId) {
+        await pool.query(
+          `INSERT INTO processo_seletivo_desafios (id, processo_seletivo_id, trilha_id, desafio_id, ordem)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT DO NOTHING`,
+          [id, processoSeletivoId, tId, desafioId, i]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO processo_seletivo_desafios (id, processo_seletivo_id, trilha_id, desafio_id, ordem)
+           VALUES ($1, $2, NULL, $3, $4)
+           ON CONFLICT DO NOTHING`,
+          [id, processoSeletivoId, desafioId, i]
+        );
+      }
     }
   }
 
   async desvincularDesafioDoProcesso(
     processoSeletivoId: string,
-    desafioId: string
+    desafioId: string,
+    trilhaId?: string
   ): Promise<void> {
     await ensureSchemaInitialized();
     const pool = getDbPool();
-    await pool.query(
-      `DELETE FROM processo_seletivo_desafios
-       WHERE processo_seletivo_id = $1 AND desafio_id = $2`,
-      [processoSeletivoId, desafioId]
-    );
+    if (trilhaId) {
+      await pool.query(
+        `DELETE FROM processo_seletivo_desafios
+         WHERE processo_seletivo_id = $1 AND desafio_id = $2 AND trilha_id = $3`,
+        [processoSeletivoId, desafioId, trilhaId]
+      );
+    } else {
+      await pool.query(
+        `DELETE FROM processo_seletivo_desafios
+         WHERE processo_seletivo_id = $1 AND desafio_id = $2`,
+        [processoSeletivoId, desafioId]
+      );
+    }
   }
 
   async listarDesafiosDoProcesso(
-    processoSeletivoId: string
+    processoSeletivoId: string,
+    trilhaId?: string
   ): Promise<DesafioEntity[]> {
-    return this.findAll({ processoSeletivoId });
+    return this.findAll({ processoSeletivoId, trilhaId });
   }
 
   async reset(): Promise<void> {
@@ -262,11 +289,26 @@ export async function resetDesafioRepository(): Promise<void> {
   await getDesafioRepository().reset();
 }
 
-/** O desafio está vinculado ao processo (direto ou pela tabela associativa)? */
+/** O desafio está vinculado ao processo e/ou trilha? */
 export async function desafioPertenceAoProcesso(
   desafioId: string,
-  processoSeletivoId: string
+  processoSeletivoId: string,
+  trilhaId?: string
 ): Promise<boolean> {
-  const desafios = await getDesafioRepository().findAll({ processoSeletivoId });
+  const desafios = await getDesafioRepository().findAll({ processoSeletivoId, trilhaId });
   return desafios.some((d) => d.id === desafioId);
 }
+
+/** Retorna os IDs dos processos seletivos aos quais este desafio está vinculado */
+export async function buscarProcessosDoDesafio(
+  desafioId: string
+): Promise<string[]> {
+  await ensureSchemaInitialized();
+  const pool = getDbPool();
+  const res = await pool.query(
+    `SELECT processo_seletivo_id FROM processo_seletivo_desafios WHERE desafio_id = $1 ORDER BY ordem ASC, created_at ASC`,
+    [desafioId]
+  );
+  return res.rows.map((r: any) => r.processo_seletivo_id);
+}
+

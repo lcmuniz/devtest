@@ -67,6 +67,14 @@ export interface CandidatoRepository {
       auditoriaBarema: ItemBaremaAuditado[];
     }
   ): Promise<InscricaoEntity | null>;
+  atualizarItensBaremaInscricao(
+    inscricaoId: string,
+    dados: {
+      itensBarema: ItemBaremaCandidato[];
+      pontuacaoProvisoriaBarema: number;
+      extratoBarema: ExtratoBaremaCalculado;
+    }
+  ): Promise<InscricaoEntity | null>;
 
   reset(): Promise<void>;
 }
@@ -331,6 +339,34 @@ export class PostgresCandidatoRepository implements CandidatoRepository {
         dados.pontuacaoHomologadaBarema,
         dados.statusAuditoriaBarema,
         JSON.stringify(dados.auditoriaBarema),
+        inscricaoId,
+      ]
+    );
+    if (res.rows.length === 0) return null;
+    return this.mapInscricaoRow(res.rows[0]);
+  }
+
+  async atualizarItensBaremaInscricao(
+    inscricaoId: string,
+    dados: {
+      itensBarema: ItemBaremaCandidato[];
+      pontuacaoProvisoriaBarema: number;
+      extratoBarema: ExtratoBaremaCalculado;
+    }
+  ): Promise<InscricaoEntity | null> {
+    await this.ensureAuditoriaColumns();
+    const pool = getDbPool();
+    const res = await pool.query(
+      `UPDATE inscricoes
+       SET itens_barema = $1,
+           pontuacao_provisoria_barema = $2,
+           extrato_barema = $3
+       WHERE id = $4
+       RETURNING *`,
+      [
+        JSON.stringify(dados.itensBarema),
+        dados.pontuacaoProvisoriaBarema,
+        JSON.stringify(dados.extratoBarema),
         inscricaoId,
       ]
     );

@@ -1,6 +1,8 @@
 // Cria ou redefine a senha de um membro da Banca.
 // Uso: BANCA_SENHA='...' node --env-file=.env scripts/criar-usuario-banca.js <email> "<nome>"
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 const { Client } = require("pg");
 
 const [email, nome = "Comissão Avaliadora"] = process.argv.slice(2);
@@ -22,6 +24,10 @@ const hash = crypto.scryptSync(senha, salt, 32).toString("hex");
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   try {
+    // Banco novo: cria as tabelas (o schema é idempotente)
+    await client.query(
+      fs.readFileSync(path.join(__dirname, "../src/infrastructure/database/schema.sql"), "utf8")
+    );
     await client.query(
       `INSERT INTO usuarios_banca (id, nome, email, senha_hash)
        VALUES ($1, $2, $3, $4)

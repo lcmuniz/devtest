@@ -76,9 +76,8 @@ CREATE INDEX IF NOT EXISTS idx_inscricoes_cod_anon ON inscricoes(codigo_anonimo)
 
 CREATE TABLE IF NOT EXISTS desafios (
   id VARCHAR(64) PRIMARY KEY,
-  processo_seletivo_id VARCHAR(64) NOT NULL REFERENCES processos_seletivos(id) ON DELETE CASCADE,
-  trilha_id VARCHAR(64) NOT NULL REFERENCES trilhas(id) ON DELETE CASCADE,
   titulo VARCHAR(255) NOT NULL,
+  categoria VARCHAR(32) NOT NULL DEFAULT 'pleno',
   enunciado_markdown TEXT NOT NULL,
   linguagem VARCHAR(32) NOT NULL,
   codigo_template TEXT NOT NULL,
@@ -89,9 +88,6 @@ CREATE TABLE IF NOT EXISTS desafios (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-CREATE INDEX IF NOT EXISTS idx_desafios_ps ON desafios(processo_seletivo_id);
-CREATE INDEX IF NOT EXISTS idx_desafios_trilha ON desafios(trilha_id);
 
 CREATE TABLE IF NOT EXISTS runner_jobs (
   id VARCHAR(64) PRIMARY KEY,
@@ -156,23 +152,28 @@ CREATE TABLE IF NOT EXISTS usuarios_banca (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Banco Global de Desafios: processo_seletivo_id e trilha_id tornam-se opcionais
-ALTER TABLE desafios ALTER COLUMN processo_seletivo_id DROP NOT NULL;
-ALTER TABLE desafios ALTER COLUMN trilha_id DROP NOT NULL;
+-- Banco Global de Desafios: remove colunas legadas 1:N da tabela desafios
+ALTER TABLE desafios DROP COLUMN IF EXISTS processo_seletivo_id;
+ALTER TABLE desafios DROP COLUMN IF EXISTS trilha_id;
 ALTER TABLE desafios ADD COLUMN IF NOT EXISTS categoria VARCHAR(32) NOT NULL DEFAULT 'pleno';
 
--- Tabela associativa de Composição de Prova / Desafios vinculados ao Processo Seletivo
+-- Tabela associativa de Composição de Prova / Desafios vinculados ao Processo Seletivo e à Trilha Técnica
 CREATE TABLE IF NOT EXISTS processo_seletivo_desafios (
   id VARCHAR(64) PRIMARY KEY,
   processo_seletivo_id VARCHAR(64) NOT NULL REFERENCES processos_seletivos(id) ON DELETE CASCADE,
+  trilha_id VARCHAR(64) REFERENCES trilhas(id) ON DELETE CASCADE,
   desafio_id VARCHAR(64) NOT NULL REFERENCES desafios(id) ON DELETE CASCADE,
   ordem INT NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE(processo_seletivo_id, desafio_id)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE processo_seletivo_desafios ADD COLUMN IF NOT EXISTS trilha_id VARCHAR(64) REFERENCES trilhas(id) ON DELETE CASCADE;
+ALTER TABLE processo_seletivo_desafios DROP CONSTRAINT IF EXISTS processo_seletivo_desafios_processo_seletivo_id_desafio_id_key;
+
 CREATE INDEX IF NOT EXISTS idx_ps_desafios_ps ON processo_seletivo_desafios(processo_seletivo_id);
+CREATE INDEX IF NOT EXISTS idx_ps_desafios_trilha ON processo_seletivo_desafios(trilha_id);
 CREATE INDEX IF NOT EXISTS idx_ps_desafios_desafio ON processo_seletivo_desafios(desafio_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_psd_trilha_desafio ON processo_seletivo_desafios (trilha_id, desafio_id) WHERE trilha_id IS NOT NULL;
 
 
 

@@ -64,6 +64,7 @@ export function InscricaoCandidatoView({
 
   // Visualização de comprovante de inscrição existente em modal/detalhe
   const [inscricaoEmVisualizacao, setInscricaoEmVisualizacao] = useState<InscricaoEntity | null>(null);
+  const [inscricaoEmEdicao, setInscricaoEmEdicao] = useState<InscricaoEntity | null>(null);
 
   // Form State
   const [trilhaId, setTrilhaId] = useState("");
@@ -226,9 +227,9 @@ export function InscricaoCandidatoView({
       return;
     }
 
-    // Validação da regra: se já tiver inscrito na mesma trilha deste processo, bloqueia
+    // Validação da regra: se já tiver inscrito na mesma trilha deste processo, bloqueia (apenas para nova inscrição)
     const trilhasJaInscritas = mapaInscricoesPorProcesso[processoSelecionado.id]?.trilhasIds || new Set();
-    if (trilhasJaInscritas.has(trilhaId)) {
+    if (!inscricaoEmEdicao && trilhasJaInscritas.has(trilhaId)) {
       setMensagemErro("Você já está inscrito nesta trilha deste Processo Seletivo. Escolha outra trilha ou consulte suas inscrições ativas.");
       return;
     }
@@ -253,6 +254,29 @@ export function InscricaoCandidatoView({
           quantidadeOuAnos: item.quantidade,
           arquivoComprovanteNome: item.arquivoNome,
         }));
+
+      // Caso de Edição de Inscrição Existente
+      if (inscricaoEmEdicao) {
+        const putRes = await fetch(`/api/inscricoes/${inscricaoEmEdicao.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            itensBarema: payloadItens,
+          }),
+        });
+        const putData = await putRes.json();
+        if (!putRes.ok || !putData.sucesso) {
+          setMensagemErro(putData.erro || (putData.erros ? putData.erros.join(" | ") : "Erro ao atualizar inscrição."));
+          return;
+        }
+
+        setInscricaoConcluida(putData.inscricao);
+        setMinhasInscricoes((prev) =>
+          prev.map((i) => (i.id === putData.inscricao.id ? putData.inscricao : i))
+        );
+        setInscricaoEmEdicao(null);
+        return;
+      }
 
       if (onSubmeterInscricao) {
         const res = await onSubmeterInscricao({
@@ -293,6 +317,29 @@ export function InscricaoCandidatoView({
     } finally {
       setEnviando(false);
     }
+  };
+
+  const handleEditarInscricao = (insc: InscricaoEntity) => {
+    const proc =
+      listaProcessos.find((p) => p.id === insc.processoSeletivoId) ||
+      processos.find((p) => p.id === insc.processoSeletivoId);
+    if (!proc) return;
+    setProcessoSelecionado(proc);
+    setInscricaoEmEdicao(insc);
+    setTrilhaId(insc.trilhaId);
+    setMensagemErro(null);
+
+    const mapa: Record<string, { quantidade: number; arquivoNome: string }> = {};
+    for (const b of proc.barema) {
+      mapa[b.id] = { quantidade: 0, arquivoNome: "" };
+    }
+    for (const item of insc.itensBarema || []) {
+      mapa[item.criterioId] = {
+        quantidade: item.quantidadeOuAnos ?? (item as any).quantidade ?? 0,
+        arquivoNome: item.arquivoComprovanteNome ?? (item as any).arquivoNome ?? "",
+      };
+    }
+    setItensBarema(mapa);
   };
 
   return (
@@ -471,16 +518,52 @@ export function InscricaoCandidatoView({
               )}
 
               <div className="pt-3 flex justify-between items-center border-t border-slate-200">
-                <a
-                  href={`/candidato/prova?inscricaoId=${encodeURIComponent(
-                    inscricaoEmVisualizacao.id
-                  )}&processoSeletivoId=${encodeURIComponent(
-                    inscricaoEmVisualizacao.processoSeletivoId
-                  )}&trilhaId=${encodeURIComponent(inscricaoEmVisualizacao.trilhaId)}`}
-                  className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-bold"
-                >
-                  Abrir Ambiente de Prova (Web IDE) →
-                </a>
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const p =
+                      listaProcessos.find((pr) => pr.id === inscricaoEmVisualizacao.processoSeletivoId) ||
+                      processos.find((pr) => pr.id === inscricaoEmVisualizacao.processoSeletivoId);
+                    if (!p) return null;
+                    const agora = Date.now();
+                    const inicioInsc = new Date(p.inicioInscricoes).getTime();
+                    const fimInscDate = new Date(p.fimInscricoes);
+                    if (
+                      fimInscDate.getUTCHours() === 0 &&
+                      fimInscDate.getUTCMinutes() === 0 &&
+                      fimInscDate.getUTCSeconds() === 0
+                    ) {
+                      fimInscDate.setUTCHours(23, 59, 59, 999);
+                    }
+                    const fimInsc = fimInscDate.getTime();
+                    const inscricaoAberta = agora >= inicioInsc && agora <= fimInsc;
+                    if (inscricaoAberta) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const ins = inscricaoEmVisualizacao;
+                            setInscricaoEmVisualizacao(null);
+                            handleEditarInscricao(ins);
+                          }}
+                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-bold cursor-pointer transition shadow-xs"
+                        >
+                          ✎ Retificar Barema / Documentos
+                        </button>
+                      );
+                    }
+                    return null;
+                  })()}
+                  <a
+                    href={`/candidato/prova?inscricaoId=${encodeURIComponent(
+                      inscricaoEmVisualizacao.id
+                    )}&processoSeletivoId=${encodeURIComponent(
+                      inscricaoEmVisualizacao.processoSeletivoId
+                    )}&trilhaId=${encodeURIComponent(inscricaoEmVisualizacao.trilhaId)}`}
+                    className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-bold"
+                  >
+                    Abrir Ambiente de Prova (Web IDE) →
+                  </a>
+                </div>
                 <button
                   onClick={() => setInscricaoEmVisualizacao(null)}
                   className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-xs font-semibold"
@@ -656,23 +739,67 @@ export function InscricaoCandidatoView({
                     </div>
 
                     <div className="flex items-center justify-between pt-1 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setInscricaoEmVisualizacao(insc)}
-                        className="text-blue-800 hover:text-blue-950 font-semibold underline text-[11px]"
-                      >
-                        Ver Extrato Barema
-                      </button>
-                      <a
-                        href={`/candidato/prova?inscricaoId=${encodeURIComponent(
-                          insc.id
-                        )}&processoSeletivoId=${encodeURIComponent(
-                          insc.processoSeletivoId
-                        )}&trilhaId=${encodeURIComponent(insc.trilhaId)}`}
-                        className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-bold text-[11px] shadow-sm"
-                      >
-                        Acessar Web IDE →
-                      </a>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setInscricaoEmVisualizacao(insc)}
+                          className="text-blue-800 hover:text-blue-950 font-semibold underline text-[11px]"
+                        >
+                          Ver Extrato Barema
+                        </button>
+                        {(() => {
+                          const p = processos.find((pr) => pr.id === insc.processoSeletivoId);
+                          const podeEditar = p && Date.now() <= new Date(p.fimInscricoes).getTime();
+                          if (!podeEditar) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleEditarInscricao(insc)}
+                              className="text-amber-800 hover:text-amber-950 font-semibold underline text-[11px]"
+                            >
+                              ✎ Retificar Barema
+                            </button>
+                          );
+                        })()}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const p = processos.find((pr) => pr.id === insc.processoSeletivoId);
+                          if (!p) return null;
+                          const agora = Date.now();
+                          const ini = new Date(p.inicioProvas).getTime();
+                          const fim = new Date(p.fimProvas).getTime();
+                          if (agora < ini) {
+                            return (
+                              <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-semibold border border-amber-200">
+                                ⏳ Prova em {new Date(p.inicioProvas).toLocaleDateString("pt-BR")}
+                              </span>
+                            );
+                          }
+                          if (agora > fim) {
+                            return (
+                              <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-semibold border border-slate-200">
+                                🔒 Encerrada
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-semibold border border-emerald-200">
+                              🟢 Aberta
+                            </span>
+                          );
+                        })()}
+                        <a
+                          href={`/candidato/prova?inscricaoId=${encodeURIComponent(
+                            insc.id
+                          )}&processoSeletivoId=${encodeURIComponent(
+                            insc.processoSeletivoId
+                          )}&trilhaId=${encodeURIComponent(insc.trilhaId)}`}
+                          className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-bold text-[11px] shadow-sm"
+                        >
+                          Acessar Web IDE →
+                        </a>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -886,15 +1013,20 @@ export function InscricaoCandidatoView({
                   {processoSelecionado.edital}
                 </span>
                 <h2 className="text-xl font-bold text-slate-900 mt-1">
-                  Inscrição e Barema Curricular
+                  {inscricaoEmEdicao ? "Retificar Inscrição e Documentos do Barema" : "Inscrição e Barema Curricular"}
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Selecione sua Trilha e informe os títulos para o cômputo da pontuação preliminar.
+                  {inscricaoEmEdicao
+                    ? `Retificando inscrição nº ${inscricaoEmEdicao.numeroInscricao} (Trilha: ${inscricaoEmEdicao.trilhaNome})`
+                    : "Selecione sua Trilha e informe os títulos para o cômputo da pontuação preliminar."}
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setProcessoSelecionado(null)}
+                onClick={() => {
+                  setProcessoSelecionado(null);
+                  setInscricaoEmEdicao(null);
+                }}
                 className="text-xs text-slate-500 hover:text-slate-800 underline"
               >
                 Voltar à Lista
@@ -938,12 +1070,13 @@ export function InscricaoCandidatoView({
                 <select
                   id="trilha"
                   value={trilhaId}
+                  disabled={!!inscricaoEmEdicao}
                   onChange={(e) => setTrilhaId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-800 focus:outline-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-800 focus:outline-none disabled:bg-slate-100 disabled:text-slate-600"
                 >
                   {processoSelecionado.trilhas.map((t) => {
                     const trilhasJaInscritas = mapaInscricoesPorProcesso[processoSelecionado.id]?.trilhasIds || new Set();
-                    const jaInscritoNesta = trilhasJaInscritas.has(t.id);
+                    const jaInscritoNesta = !inscricaoEmEdicao && trilhasJaInscritas.has(t.id);
                     return (
                       <option key={t.id} value={t.id} disabled={jaInscritoNesta}>
                         {t.nome} {jaInscritoNesta ? "— (Você já está inscrito nesta trilha)" : t.descricao ? `— ${t.descricao}` : ""}
@@ -951,7 +1084,7 @@ export function InscricaoCandidatoView({
                     );
                   })}
                 </select>
-                {mapaInscricoesPorProcesso[processoSelecionado.id]?.trilhasIds.has(trilhaId) && (
+                {!inscricaoEmEdicao && mapaInscricoesPorProcesso[processoSelecionado.id]?.trilhasIds.has(trilhaId) && (
                   <p className="text-xs text-amber-700 font-medium mt-1">
                     Aviso: Você já está inscrito na trilha selecionada. Selecione outra opção para prosseguir.
                   </p>
@@ -1051,17 +1184,20 @@ export function InscricaoCandidatoView({
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setProcessoSelecionado(null)}
+                onClick={() => {
+                  setProcessoSelecionado(null);
+                  setInscricaoEmEdicao(null);
+                }}
                 className="px-4 py-2 border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-100"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                disabled={enviando || mapaInscricoesPorProcesso[processoSelecionado.id]?.trilhasIds.has(trilhaId)}
+                disabled={enviando || (!inscricaoEmEdicao && mapaInscricoesPorProcesso[processoSelecionado.id]?.trilhasIds.has(trilhaId))}
                 className="px-6 py-2.5 bg-blue-800 hover:bg-blue-900 disabled:opacity-50 text-white text-sm font-bold rounded-lg shadow-sm transition"
               >
-                {enviando ? "Processando..." : "Confirmar e Submeter Inscrição"}
+                {enviando ? "Processando..." : (inscricaoEmEdicao ? "Salvar Retificações do Barema" : "Confirmar e Submeter Inscrição")}
               </button>
             </div>
           </form>

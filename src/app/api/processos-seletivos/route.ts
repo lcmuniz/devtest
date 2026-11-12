@@ -45,17 +45,29 @@ export async function POST(request: Request) {
     );
     const desafioRepo = getDesafioRepository();
 
-    if (body.sorteio && typeof body.sorteio === "object") {
+    if (body.desafiosPorTrilha && typeof body.desafiosPorTrilha === "object") {
+      for (const [trilhaId, ids] of Object.entries(body.desafiosPorTrilha)) {
+        if (Array.isArray(ids) && ids.length > 0) {
+          await desafioRepo.vincularDesafiosAoProcesso(
+            processoSeletivo.id,
+            ids as string[],
+            trilhaId
+          );
+        }
+      }
+    } else if (body.sorteio && typeof body.sorteio === "object") {
       const banco = await desafioRepo.findAll();
       const sorteados = sortearDesafiosPorLinguagem(banco, body.sorteio);
       await desafioRepo.vincularDesafiosAoProcesso(
         processoSeletivo.id,
-        sorteados.map((d) => d.id)
+        sorteados.map((d) => d.id),
+        body.trilhaId
       );
     } else if (Array.isArray(body.desafiosIds) && body.desafiosIds.length > 0) {
       await desafioRepo.vincularDesafiosAoProcesso(
         processoSeletivo.id,
-        body.desafiosIds
+        body.desafiosIds,
+        body.trilhaId
       );
     }
 

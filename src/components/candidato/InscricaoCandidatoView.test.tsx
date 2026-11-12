@@ -294,4 +294,47 @@ describe("Interface do Candidato - Inscrição e Cálculo de Barema (Seam 3)", (
     expect(screen.getByText("Processo DevTest 2024 (Encerrado)")).toBeInTheDocument();
     expect(screen.getByText("Prazo de Inscrição Encerrado")).toBeInTheDocument();
   });
+
+  it("deve permitir abrir o formulário em modo retificação ao clicar em Retificar Barema quando o prazo estiver aberto", () => {
+    const inscricoesIniciais = [
+      {
+        id: "insc-edit-1",
+        numeroInscricao: "INSC-2026-8888",
+        codigoAnonimo: "CAND-8888",
+        candidatoId: "cand-1",
+        candidatoNome: "Carlos",
+        candidatoEmail: "carlos@devtest.com",
+        candidatoCpf: "12345678901",
+        processoSeletivoId: "ps-1",
+        processoSeletivoTitulo: "Processo Seletivo Simplificado DevTest 2026/1",
+        trilhaId: "trilha-backend",
+        trilhaNome: "Backend Java",
+        itensBarema: [{ criterioId: "crit-exp", quantidade: 2, arquivoNome: "antigo.pdf" }],
+        pontuacaoProvisoriaBarema: 4.0,
+        extratoBarema: { pontuacaoProvisoriaBarema: 4.0, itensDetalhados: [] },
+        createdAt: "2026-02-01T10:00:00Z",
+      },
+    ];
+
+    render(
+      <InscricaoCandidatoView
+        processos={processosAbertos}
+        candidatoInicial={{ id: "cand-1", nome: "Carlos", email: "carlos@devtest.com", cpf: "12345678901" }}
+        inscricoesIniciais={inscricoesIniciais as any}
+      />
+    );
+
+    const botaoRetificar = screen.getByRole("button", { name: /✎ Retificar Barema/i });
+    expect(botaoRetificar).toBeInTheDocument();
+
+    fireEvent.click(botaoRetificar);
+
+    expect(screen.getByText(/Retificar Inscrição e Documentos do Barema/i)).toBeInTheDocument();
+    expect(screen.getByText(/Retificando inscrição nº INSC-2026-8888/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Salvar Retificações do Barema/i })).toBeInTheDocument();
+
+    // O campo de quantidade deve carregar o valor anterior (2)
+    const inputExp = screen.getByLabelText(/anos de experiência comprovada/i);
+    expect(inputExp).toHaveValue(2);
+  });
 });

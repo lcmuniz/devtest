@@ -125,6 +125,7 @@ export function ProcessosSeletivosBanca({
   const [barema, setBarema] = useState(CRITERIOS_PADRAO);
 
   // Composição de Desafios no Formulário (Criação/Edição)
+  const [trilhaFormAtivaIndex, setTrilhaFormAtivaIndex] = useState<number>(0);
   const [desafiosSelecionadosIds, setDesafiosSelecionadosIds] = useState<string[]>([]);
   const [cotaJava, setCotaJava] = useState<number>(0);
   const [cotaPython, setCotaPython] = useState<number>(0);
@@ -136,6 +137,7 @@ export function ProcessosSeletivosBanca({
   // Gerenciador de Desafios em Processo Existente
   const [processoGerenciandoDesafios, setProcessoGerenciandoDesafios] =
     useState<ProcessoSeletivoEntity | null>(null);
+  const [gerenciadorTrilhaAtivaId, setGerenciadorTrilhaAtivaId] = useState<string>("");
   const [desafiosAnexadosAoProcesso, setDesafiosAnexadosAoProcesso] = useState<DesafioEntity[]>([]);
   const [carregandoDesafiosProcesso, setCarregandoDesafiosProcesso] = useState(false);
   const [gerenciadorCotaJava, setGerenciadorCotaJava] = useState<number>(0);
@@ -167,6 +169,7 @@ export function ProcessosSeletivosBanca({
     setNotaCorte(50);
     setTrilhas([{ nome: "Backend Java", descricao: "Java 21 e Spring Boot" }]);
     setBarema(CRITERIOS_PADRAO);
+    setTrilhaFormAtivaIndex(0);
     setDesafiosSelecionadosIds([]);
     setCotaJava(0);
     setCotaPython(0);
@@ -207,6 +210,7 @@ export function ProcessosSeletivosBanca({
         exigeComprovante: b.exigeComprovante ?? true,
       }))
     );
+    setTrilhaFormAtivaIndex(0);
     setDesafiosSelecionadosIds([]);
     setCotaJava(0);
     setCotaPython(0);
@@ -317,24 +321,49 @@ export function ProcessosSeletivosBanca({
   };
 
   // Funções do Gerenciador de Desafios em Processo Existente (Drawer)
-  const handleAbrirGerenciadorDesafios = async (proc: ProcessoSeletivoEntity) => {
-    if (processoGerenciandoDesafios?.id === proc.id) {
+  const handleAbrirGerenciadorDesafios = async (proc: ProcessoSeletivoEntity, trilhaId?: string) => {
+    if (processoGerenciandoDesafios?.id === proc.id && !trilhaId) {
       setProcessoGerenciandoDesafios(null);
       return;
     }
+    const targetTrilhaId = trilhaId || proc.trilhas[0]?.id || "";
     setProcessoGerenciandoDesafios(proc);
+    setGerenciadorTrilhaAtivaId(targetTrilhaId);
     setCarregandoDesafiosProcesso(true);
     setAvisoSorteioGerenciador(null);
     setGerenciadorTermoBusca("");
     setGerenciadorCategoriasFiltro(["junior", "pleno", "senior"]);
     try {
-      const res = await fetch(`/api/processos-seletivos/${proc.id}/desafios`);
+      const url = targetTrilhaId
+        ? `/api/processos-seletivos/${proc.id}/desafios?trilhaId=${encodeURIComponent(targetTrilhaId)}`
+        : `/api/processos-seletivos/${proc.id}/desafios`;
+      const res = await fetch(url);
       const dados = await res.json();
       if (dados.sucesso && Array.isArray(dados.desafios)) {
         setDesafiosAnexadosAoProcesso(dados.desafios);
       }
     } catch {
       // Ignora erro de requisição em mock
+    } finally {
+      setCarregandoDesafiosProcesso(false);
+    }
+  };
+
+  const handleTrocarTrilhaGerenciador = async (trilhaId: string) => {
+    if (!processoGerenciandoDesafios) return;
+    setGerenciadorTrilhaAtivaId(trilhaId);
+    setCarregandoDesafiosProcesso(true);
+    setAvisoSorteioGerenciador(null);
+    try {
+      const res = await fetch(
+        `/api/processos-seletivos/${processoGerenciandoDesafios.id}/desafios?trilhaId=${encodeURIComponent(trilhaId)}`
+      );
+      const dados = await res.json();
+      if (dados.sucesso && Array.isArray(dados.desafios)) {
+        setDesafiosAnexadosAoProcesso(dados.desafios);
+      }
+    } catch {
+      // Ignora erro
     } finally {
       setCarregandoDesafiosProcesso(false);
     }
@@ -386,6 +415,7 @@ export function ProcessosSeletivosBanca({
             typescript: Number(gerenciadorCotaTypeScript) || 0,
           },
           categorias: gerenciadorCategoriasSorteio,
+          trilhaId: gerenciadorTrilhaAtivaId || undefined,
         }),
       });
       const dados = await res.json();
@@ -409,6 +439,7 @@ export function ProcessosSeletivosBanca({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           desafiosIds: [desafioId],
+          trilhaId: gerenciadorTrilhaAtivaId || undefined,
         }),
       });
       const dados = await res.json();
@@ -424,8 +455,9 @@ export function ProcessosSeletivosBanca({
     if (!processoGerenciandoDesafios) return;
     setCarregandoDesafiosProcesso(true);
     try {
+      const queryTrilha = gerenciadorTrilhaAtivaId ? `&trilhaId=${encodeURIComponent(gerenciadorTrilhaAtivaId)}` : "";
       const res = await fetch(
-        `/api/processos-seletivos/${processoGerenciandoDesafios.id}/desafios?desafioId=${desafioId}`,
+        `/api/processos-seletivos/${processoGerenciandoDesafios.id}/desafios?desafioId=${desafioId}${queryTrilha}`,
         { method: "DELETE" }
       );
       const dados = await res.json();
@@ -526,6 +558,7 @@ export function ProcessosSeletivosBanca({
       trilhas,
       barema,
       desafiosIds: desafiosSelecionadosIds,
+      trilhaId: trilhas[trilhaFormAtivaIndex]?.id || undefined,
     };
 
     setSalvando(true);
@@ -969,13 +1002,42 @@ export function ProcessosSeletivosBanca({
                     Composição da Prova Prática (Banco Global de Desafios)
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Defina cotas por linguagem e sorteie aleatoriamente da base, ou selecione desafios manualmente.
+                    Defina cotas por linguagem e sorteie aleatoriamente da base, ou selecione desafios manualmente para a trilha técnica.
                   </p>
                 </div>
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-900">
                   {desafiosSelecionadosIds.length} desafio(s) selecionado(s)
                 </span>
               </div>
+
+              {/* Seletor de Trilha Técnica no Formulário */}
+              {trilhas.length > 0 && (
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-blue-950 uppercase">
+                      Trilha da Prova:
+                    </span>
+                    {trilhas.map((t, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setTrilhaFormAtivaIndex(idx)}
+                        className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition ${
+                          trilhaFormAtivaIndex === idx
+                            ? "bg-blue-700 text-white shadow-sm"
+                            : "bg-white text-blue-900 hover:bg-blue-100 border border-blue-300"
+                        }`}
+                      >
+                        Trilha: {t.nome || `Trilha ${idx + 1}`}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-[11px] text-blue-800">
+                    Definindo desafios para:{" "}
+                    <strong>{trilhas[trilhaFormAtivaIndex]?.nome || `Trilha ${trilhaFormAtivaIndex + 1}`}</strong>
+                  </span>
+                </div>
+              )}
 
               {/* Sorteio por Cotas de Linguagem e Categoria */}
               <div className="bg-white p-4 rounded-lg border border-slate-200 space-y-3">
@@ -1348,12 +1410,46 @@ export function ProcessosSeletivosBanca({
                       <div className="mt-4 pt-4 border-t border-indigo-100 bg-indigo-50/50 p-4 rounded-lg space-y-4">
                         <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
                           <span className="text-xs font-bold uppercase tracking-wider text-indigo-950">
-                            Adicionar Desafios ao Processo Seletivo
+                            Composição de Desafios da Prova Prática
                           </span>
                           {carregandoDesafiosProcesso && (
                             <span className="text-xs text-indigo-700 font-medium">Atualizando...</span>
                           )}
                         </div>
+
+                        {/* Seletor de Trilha Técnica no Gerenciador Inline */}
+                        {proc.trilhas.length > 0 && (
+                          <div className="bg-indigo-100/70 p-3 rounded-lg border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-indigo-950 uppercase">
+                                Trilha da Prova:
+                              </span>
+                              {proc.trilhas.map((t) => {
+                                const isAtiva = (gerenciadorTrilhaAtivaId || proc.trilhas[0]?.id) === t.id;
+                                return (
+                                  <button
+                                    key={t.id}
+                                    type="button"
+                                    onClick={() => handleTrocarTrilhaGerenciador(t.id)}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition ${
+                                      isAtiva
+                                        ? "bg-indigo-700 text-white shadow-sm"
+                                        : "bg-white text-indigo-900 hover:bg-indigo-50 border border-indigo-300"
+                                    }`}
+                                  >
+                                    Trilha: {t.nome}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <span className="text-[11px] text-indigo-800 font-medium">
+                              Configurando composição para:{" "}
+                              <strong>
+                                {proc.trilhas.find((t) => t.id === (gerenciadorTrilhaAtivaId || proc.trilhas[0]?.id))?.nome || proc.trilhas[0]?.nome}
+                              </strong>
+                            </span>
+                          </div>
+                        )}
 
                         {/* Sorteio Rápido para Processo Existente */}
                         <div className="bg-white p-3 rounded border border-indigo-100 space-y-2">
@@ -1540,7 +1636,7 @@ export function ProcessosSeletivosBanca({
                         <div className="space-y-2 pt-3 border-t border-indigo-200">
                           <div className="flex items-center justify-between">
                             <h4 className="text-sm font-bold text-indigo-950">
-                              Desafios Vinculados ao Processo: {proc.titulo} ({desafiosAnexadosAoProcesso.length})
+                              Desafios da Trilha ({proc.trilhas.find((t) => t.id === (gerenciadorTrilhaAtivaId || proc.trilhas[0]?.id))?.nome || proc.titulo}): {desafiosAnexadosAoProcesso.length}
                             </h4>
                           </div>
 
