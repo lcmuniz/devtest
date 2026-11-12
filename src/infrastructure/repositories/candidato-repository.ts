@@ -70,9 +70,9 @@ export interface CandidatoRepository {
   atualizarItensBaremaInscricao(
     inscricaoId: string,
     dados: {
-      itensBarema: ItemBaremaCandidato[];
+      itensBarema: ItemBaremaDeclarado[];
       pontuacaoProvisoriaBarema: number;
-      extratoBarema: ExtratoBaremaCalculado;
+      extratoBarema: ResultadoCalculoBarema;
     }
   ): Promise<InscricaoEntity | null>;
 
@@ -349,9 +349,9 @@ export class PostgresCandidatoRepository implements CandidatoRepository {
   async atualizarItensBaremaInscricao(
     inscricaoId: string,
     dados: {
-      itensBarema: ItemBaremaCandidato[];
+      itensBarema: ItemBaremaDeclarado[];
       pontuacaoProvisoriaBarema: number;
-      extratoBarema: ExtratoBaremaCalculado;
+      extratoBarema: ResultadoCalculoBarema;
     }
   ): Promise<InscricaoEntity | null> {
     await this.ensureAuditoriaColumns();

@@ -153,7 +153,7 @@ describe("API Inscrições - Retificação e Edição de Documentos (PUT /api/in
       trilhaNome: ps.trilhas[0].nome,
       itensBarema: [],
       pontuacaoProvisoriaBarema: 0,
-      extratoBarema: { pontuacaoTotal: 0, itens: [] },
+      extratoBarema: { pontuacaoProvisoriaBarema: 0, itensDetalhados: [] },
     });
 
     // 3. Tenta atualizar
