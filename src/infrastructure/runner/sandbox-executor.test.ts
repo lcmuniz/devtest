@@ -5,7 +5,8 @@ import { describe, it, expect, vi } from "vitest";
 import { SandboxExecutor, ambienteSandbox } from "./sandbox-executor";
 import { LinguagemDesafio } from "@/domain/desafio/desafio";
 
-describe("SandboxExecutor: Execução Isolada Multi-Linguagem (Seam 2)", () => {
+// Compila e executa processos reais (javac, timeouts): lento em runners de CI
+describe("SandboxExecutor: Execução Isolada Multi-Linguagem (Seam 2)", { timeout: 30_000 }, () => {
   const executor = new SandboxExecutor();
 
   it("deve executar código TypeScript válido com testes públicos e ocultos e retornar SUCCESS", async () => {
