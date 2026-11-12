@@ -1,0 +1,36 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - AUTH_SECRET=${AUTH_SECRET}
+      - RUNNER_URL=http://runner:3000
+      - RUNNER_TOKEN=${RUNNER_TOKEN}
+    depends_on:
+      - runner
+    networks:
+      - dokploy-network
+
+  runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - RUNNER_SERVICE=true
+      - RUNNER_TOKEN=${RUNNER_TOKEN}
+    networks:
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true

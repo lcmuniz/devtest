@@ -1507,11 +1507,11 @@ async function main() {
       const id = `desafio-local-${crypto.randomUUID()}`;
       await client.query(`
         INSERT INTO desafios (
-          id, processo_seletivo_id, trilha_id, titulo, categoria,
+          id, titulo, categoria,
           enunciado_markdown, linguagem, codigo_template,
           suite_testes_publicos, suite_testes_ocultos,
           timeout_seconds, memory_limit_mb, created_at, updated_at
-        ) VALUES ($1, NULL, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
       `, [
         id,
         d.titulo,
